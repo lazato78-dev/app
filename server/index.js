@@ -57,8 +57,32 @@ function publicUser(u) {
     subscriptionStatus: u.subscription_status,
     currentPeriodEnd: u.current_period_end,
     isMember: isMember(u),
+    bio: u.bio || '',
+    location: u.location || '',
+    teenInfo: u.teen_info || '',
+    interests: u.interests || '',
+    avatar: u.avatar || null,
+    allowDms: u.allow_dms !== false,
   };
 }
+
+// What other members can see about someone (never the email).
+function profileOf(u) {
+  return {
+    id: u.id,
+    displayName: u.display_name,
+    role: u.role,
+    bio: u.bio || '',
+    location: u.location || '',
+    teenInfo: u.teen_info || '',
+    interests: u.interests || '',
+    avatar: u.avatar || null,
+    allowDms: u.allow_dms !== false,
+    memberSince: u.created_at,
+  };
+}
+
+const AVATAR_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 
 function setAuthCookie(res, user) {
   const token = jwt.sign({ uid: user.id }, JWT_SECRET, { expiresIn: '30d' });
@@ -151,7 +175,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), wrap(
   res.json({ received: true });
 }));
 
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '400kb' }));
 app.use(cookieParser());
 app.use(wrap(auth));
 
@@ -206,11 +230,186 @@ app.get('/api/me', (req, res) => {
 });
 
 app.patch('/api/me', requireUser, wrap(async (req, res) => {
-  const displayName = req.body.displayName != null ? clean(req.body.displayName, 40) : req.user.display_name;
-  const lang = req.body.lang === 'en' ? 'en' : req.body.lang === 'es' ? 'es' : req.user.lang;
+  const u = req.user;
+  const b = req.body || {};
+  const displayName = b.displayName != null ? clean(b.displayName, 40) : u.display_name;
+  const lang = b.lang === 'en' ? 'en' : b.lang === 'es' ? 'es' : u.lang;
   if (displayName.length < 2) return res.status(400).json({ error: 'name' });
-  const user = await db.one('UPDATE users SET display_name=$1, lang=$2 WHERE id=$3 RETURNING *', [displayName, lang, req.user.id]);
+  const bio = b.bio != null ? clean(b.bio, 600) : u.bio;
+  const location = b.location != null ? clean(b.location, 80) : u.location;
+  const teenInfo = b.teenInfo != null ? clean(b.teenInfo, 160) : u.teen_info;
+  const interests = b.interests != null ? clean(b.interests, 200) : u.interests;
+  const allowDms = b.allowDms != null ? Boolean(b.allowDms) : u.allow_dms;
+  let avatar = u.avatar;
+  if (b.avatar === null) avatar = null;
+  else if (typeof b.avatar === 'string') {
+    if (b.avatar.length > 300000 || !AVATAR_RE.test(b.avatar)) return res.status(400).json({ error: 'avatar' });
+    avatar = b.avatar;
+  }
+  const user = await db.one(
+    `UPDATE users SET display_name=$1, lang=$2, bio=$3, location=$4, teen_info=$5, interests=$6, allow_dms=$7, avatar=$8
+     WHERE id=$9 RETURNING *`,
+    [displayName, lang, bio, location, teenInfo, interests, allowDms, avatar, u.id]
+  );
   res.json({ user: publicUser(user) });
+}));
+
+// ----- members & profiles -----
+app.get('/api/members', requireMember, wrap(async (req, res) => {
+  const q = clean(req.query.q, 60);
+  const rows = await db.query(
+    `SELECT * FROM users
+     WHERE ($1 = '' OR display_name ILIKE '%' || $1 || '%' OR location ILIKE '%' || $1 || '%' OR interests ILIKE '%' || $1 || '%')
+     ORDER BY (avatar IS NOT NULL OR bio <> '') DESC, created_at DESC LIMIT 200`,
+    [q]
+  );
+  res.json({ members: rows.filter(isMember).map(profileOf) });
+}));
+
+app.get('/api/users/:id', requireMember, wrap(async (req, res) => {
+  const u = await db.one('SELECT * FROM users WHERE id=$1', [parseInt(req.params.id, 10) || 0]);
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  const blocked = await db.one('SELECT 1 AS x FROM blocks WHERE user_id=$1 AND blocked_id=$2', [req.user.id, u.id]);
+  const posts = await db.query(
+    `SELECT id, title, category, created_at FROM posts WHERE user_id=$1 AND NOT deleted ORDER BY id DESC LIMIT 5`, [u.id]);
+  res.json({ profile: profileOf(u), blockedByMe: Boolean(blocked), posts });
+}));
+
+app.post('/api/blocks/:id', requireMember, wrap(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id || id === req.user.id) return res.status(400).json({ error: 'bad' });
+  await db.query('INSERT INTO blocks (user_id, blocked_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.user.id, id]);
+  res.json({ ok: true });
+}));
+app.delete('/api/blocks/:id', requireMember, wrap(async (req, res) => {
+  await db.query('DELETE FROM blocks WHERE user_id=$1 AND blocked_id=$2', [req.user.id, parseInt(req.params.id, 10) || 0]);
+  res.json({ ok: true });
+}));
+
+// ----- private messages -----
+app.get('/api/dms', requireMember, wrap(async (req, res) => {
+  const me = req.user.id;
+  const rows = await db.query(
+    `SELECT DISTINCT ON (other) other, id, body, created_at, sender_id, read_at FROM (
+       SELECT CASE WHEN sender_id=$1 THEN recipient_id ELSE sender_id END AS other, id, body, created_at, sender_id, read_at
+       FROM direct_messages WHERE (sender_id=$1 OR recipient_id=$1) AND NOT deleted
+     ) t ORDER BY other, id DESC`,
+    [me]
+  );
+  const unread = await db.query(
+    `SELECT sender_id, count(*)::int AS n FROM direct_messages WHERE recipient_id=$1 AND read_at IS NULL AND NOT deleted GROUP BY sender_id`, [me]);
+  const unreadBy = Object.fromEntries(unread.map((r) => [r.sender_id, r.n]));
+  const ids = rows.map((r) => r.other);
+  const users = ids.length ? await db.query('SELECT * FROM users WHERE id = ANY($1::int[])', [ids]) : [];
+  const byId = Object.fromEntries(users.map((u) => [u.id, profileOf(u)]));
+  const conversations = rows
+    .filter((r) => byId[r.other])
+    .map((r) => ({ user: byId[r.other], last: { body: r.body, created_at: r.created_at, mine: r.sender_id === me }, unread: unreadBy[r.other] || 0 }))
+    .sort((a, b) => new Date(b.last.created_at) - new Date(a.last.created_at));
+  res.json({ conversations });
+}));
+
+app.get('/api/dms/unread', requireUser, wrap(async (req, res) => {
+  const r = await db.one(`SELECT count(*)::int AS n FROM direct_messages WHERE recipient_id=$1 AND read_at IS NULL AND NOT deleted`, [req.user.id]);
+  res.json({ unread: r.n });
+}));
+
+app.get('/api/dms/:id', requireMember, wrap(async (req, res) => {
+  const me = req.user.id;
+  const other = await db.one('SELECT * FROM users WHERE id=$1', [parseInt(req.params.id, 10) || 0]);
+  if (!other || other.id === me) return res.status(404).json({ error: 'not_found' });
+  const msgs = await db.query(
+    `SELECT id, sender_id, recipient_id, body, created_at FROM direct_messages
+     WHERE ((sender_id=$1 AND recipient_id=$2) OR (sender_id=$2 AND recipient_id=$1)) AND NOT deleted
+     ORDER BY id DESC LIMIT 200`,
+    [me, other.id]
+  );
+  await db.query('UPDATE direct_messages SET read_at=now() WHERE recipient_id=$1 AND sender_id=$2 AND read_at IS NULL', [me, other.id]);
+  const blocked = await db.one('SELECT 1 AS x FROM blocks WHERE user_id=$1 AND blocked_id=$2', [me, other.id]);
+  res.json({ user: profileOf(other), messages: msgs.reverse(), blockedByMe: Boolean(blocked) });
+}));
+
+app.post('/api/dms/:id', requireMember, wrap(async (req, res) => {
+  const me = req.user;
+  if (!rateLimit(`dm:${me.id}`, 30, 60 * 1000)) return res.status(429).json({ error: 'rate' });
+  const other = await db.one('SELECT * FROM users WHERE id=$1', [parseInt(req.params.id, 10) || 0]);
+  if (!other || other.id === me.id || !isMember(other)) return res.status(404).json({ error: 'not_found' });
+  const body = clean(req.body.body, 2000);
+  if (!body) return res.status(400).json({ error: 'empty' });
+  const blocked = await db.one(
+    'SELECT 1 AS x FROM blocks WHERE (user_id=$1 AND blocked_id=$2) OR (user_id=$2 AND blocked_id=$1)', [other.id, me.id]);
+  if (blocked || other.allow_dms === false) return res.status(403).json({ error: 'dm_closed' });
+  const row = await db.one(
+    'INSERT INTO direct_messages (sender_id, recipient_id, body) VALUES ($1,$2,$3) RETURNING id, sender_id, recipient_id, body, created_at',
+    [me.id, other.id, body]
+  );
+  const payload = { ...row, sender_name: me.display_name };
+  io.to(`user:${other.id}`).emit('dm', payload);
+  io.to(`user:${me.id}`).emit('dm', payload);
+  res.json({ message: row });
+}));
+
+// ----- events -----
+app.get('/api/events', requireMember, wrap(async (req, res) => {
+  const rows = await db.query(
+    `SELECT e.*, (SELECT count(*)::int FROM event_rsvps r WHERE r.event_id=e.id) AS going,
+            EXISTS(SELECT 1 FROM event_rsvps r WHERE r.event_id=e.id AND r.user_id=$1) AS me_going
+     FROM events e WHERE NOT e.deleted AND e.starts_at > now() - interval '30 days'
+     ORDER BY e.starts_at`,
+    [req.user.id]
+  );
+  res.json({ events: rows });
+}));
+
+app.post('/api/events', requireAdmin, wrap(async (req, res) => {
+  const title = clean(req.body.title, 150);
+  const description = clean(req.body.description, 3000);
+  const link = clean(req.body.link, 500);
+  const starts = new Date(req.body.startsAt);
+  const duration = Math.min(Math.max(parseInt(req.body.durationMin, 10) || 60, 15), 600);
+  const lang = ['es', 'en', 'both'].includes(req.body.lang) ? req.body.lang : 'es';
+  if (title.length < 3 || isNaN(starts)) return res.status(400).json({ error: 'bad' });
+  if (link && !/^https:\/\//i.test(link)) return res.status(400).json({ error: 'link' });
+  const ev = await db.one(
+    `INSERT INTO events (title, description, starts_at, duration_min, link, lang, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    [title, description, starts, duration, link, lang, req.user.id]
+  );
+  res.json({ id: ev.id });
+}));
+
+app.delete('/api/events/:id', requireAdmin, wrap(async (req, res) => {
+  await db.query('UPDATE events SET deleted=true WHERE id=$1', [parseInt(req.params.id, 10) || 0]);
+  res.json({ ok: true });
+}));
+
+app.post('/api/events/:id/rsvp', requireMember, wrap(async (req, res) => {
+  const id = parseInt(req.params.id, 10) || 0;
+  const ev = await db.one('SELECT id FROM events WHERE id=$1 AND NOT deleted', [id]);
+  if (!ev) return res.status(404).json({ error: 'not_found' });
+  if (req.body.going) await db.query('INSERT INTO event_rsvps (event_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, req.user.id]);
+  else await db.query('DELETE FROM event_rsvps WHERE event_id=$1 AND user_id=$2', [id, req.user.id]);
+  res.json({ ok: true });
+}));
+
+// ----- member home / dashboard -----
+app.get('/api/home', requireMember, wrap(async (req, res) => {
+  const me = req.user.id;
+  const [events, posts, rooms, unread, newMembers, counts] = await Promise.all([
+    db.query(`SELECT id, title, starts_at, lang FROM events WHERE NOT deleted AND starts_at > now() - interval '2 hours' ORDER BY starts_at LIMIT 3`),
+    db.query(`SELECT p.id, p.title, p.category, p.last_activity, u.display_name,
+                (SELECT count(*)::int FROM replies r WHERE r.post_id=p.id AND NOT r.deleted) AS reply_count
+              FROM posts p JOIN users u ON u.id=p.user_id WHERE NOT p.deleted ORDER BY p.last_activity DESC LIMIT 5`),
+    db.query(`SELECT r.slug, r.icon, r.name_en, r.name_es, count(m.id)::int AS n
+              FROM rooms r JOIN messages m ON m.room_id=r.id AND NOT m.deleted AND m.created_at > now() - interval '3 days'
+              GROUP BY r.id ORDER BY n DESC LIMIT 4`),
+    db.one(`SELECT count(*)::int AS n FROM direct_messages WHERE recipient_id=$1 AND read_at IS NULL AND NOT deleted`, [me]),
+    db.query(`SELECT * FROM users ORDER BY created_at DESC LIMIT 8`),
+    db.one(`SELECT (SELECT count(*)::int FROM users) AS members, (SELECT count(*)::int FROM posts WHERE NOT deleted) AS posts`),
+  ]);
+  res.json({
+    events, posts, rooms, unread: unread.n, counts,
+    newMembers: newMembers.filter((u) => u.id !== me && isMember(u)).slice(0, 6).map(profileOf),
+  });
 }));
 
 // ----- billing -----
@@ -349,7 +548,7 @@ app.delete('/api/replies/:id', requireMember, wrap(async (req, res) => {
 // ----- reports & admin -----
 app.post('/api/reports', requireMember, wrap(async (req, res) => {
   if (!rateLimit(`report:${req.user.id}`, 20, 60 * 60 * 1000)) return res.status(429).json({ error: 'rate' });
-  const kind = ['message', 'post', 'reply'].includes(req.body.kind) ? req.body.kind : null;
+  const kind = ['message', 'post', 'reply', 'dm', 'user'].includes(req.body.kind) ? req.body.kind : null;
   const targetId = parseInt(req.body.targetId, 10);
   if (!kind || !targetId) return res.status(400).json({ error: 'bad' });
   await db.query('INSERT INTO reports (user_id, kind, target_id, reason) VALUES ($1,$2,$3,$4)',
@@ -364,6 +563,8 @@ app.get('/api/admin/reports', requireAdmin, wrap(async (req, res) => {
          WHEN 'message' THEN (SELECT body FROM messages WHERE id=rp.target_id)
          WHEN 'post' THEN (SELECT title || ': ' || body FROM posts WHERE id=rp.target_id)
          WHEN 'reply' THEN (SELECT body FROM replies WHERE id=rp.target_id)
+         WHEN 'dm' THEN (SELECT body FROM direct_messages WHERE id=rp.target_id)
+         WHEN 'user' THEN (SELECT 'Perfil / profile: ' || display_name || ' — ' || bio FROM users WHERE id=rp.target_id)
        END AS content
      FROM reports rp JOIN users u ON u.id=rp.user_id
      WHERE NOT rp.resolved ORDER BY rp.id DESC LIMIT 100`
@@ -376,8 +577,9 @@ app.post('/api/admin/reports/:id/resolve', requireAdmin, wrap(async (req, res) =
   const rp = await db.one('SELECT * FROM reports WHERE id=$1', [id]);
   if (!rp) return res.status(404).json({ error: 'not_found' });
   if (req.body.removeContent) {
-    const table = { message: 'messages', post: 'posts', reply: 'replies' }[rp.kind];
-    await db.query(`UPDATE ${table} SET deleted=true WHERE id=$1`, [rp.target_id]);
+    const table = { message: 'messages', post: 'posts', reply: 'replies', dm: 'direct_messages' }[rp.kind];
+    if (table) await db.query(`UPDATE ${table} SET deleted=true WHERE id=$1`, [rp.target_id]);
+    if (rp.kind === 'user') await db.query(`UPDATE users SET bio='', avatar=NULL WHERE id=$1`, [rp.target_id]);
     if (rp.kind === 'message') io.emit('deleted', { id: rp.target_id });
   }
   await db.query('UPDATE reports SET resolved=true WHERE id=$1', [id]);
@@ -420,6 +622,9 @@ async function emitPresence(slug) {
 }
 
 io.on('connection', (socket) => {
+  socket.join(`user:${socket.data.user.id}`);
+  db.query('UPDATE users SET last_seen=now() WHERE id=$1', [socket.data.user.id]).catch(() => {});
+
   socket.on('join', async (slug, ack) => {
     try {
       for (const r of socket.rooms) {
