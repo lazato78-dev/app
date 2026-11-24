@@ -1,0 +1,35 @@
+# Render Blueprint: web service + PostgreSQL database.
+# In Render: New → Blueprint → pick this repo. You will be asked for the values marked sync: false.
+services:
+  - type: web
+    name: circulo-azul
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: circulo-azul-db
+          property: connectionString
+      - key: ADMIN_EMAIL          # your email; that account becomes moderator/admin
+        sync: false
+      - key: STRIPE_SECRET_KEY    # sk_test_... or sk_live_... (leave empty = free access mode)
+        sync: false
+      - key: STRIPE_PRICE_ID      # price_... of your monthly membership
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET  # whsec_... from the Stripe webhook endpoint
+        sync: false
+      - key: PRICE_LABEL          # text shown on the site, e.g. "$9.99 USD / mes"
+        sync: false
+
+databases:
+  - name: circulo-azul-db
+    plan: free

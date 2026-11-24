@@ -1,0 +1,24 @@
+{
+  "name": "circulo-azul",
+  "version": "1.0.0",
+  "description": "Community app where mothers of autistic teens connect, chat and learn. Bilingual (EN/ES) with monthly membership via Stripe.",
+  "main": "server/index.js",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1",
+    "socket.io": "^4.8.1",
+    "stripe": "^17.5.0"
+  }
+}
