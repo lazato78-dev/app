@@ -8,6 +8,8 @@
     unread: 0,
     dmListener: null,
   };
+  // Events & online meetings are built but hidden until courses start. Set to true to turn them on.
+  const SHOW_EVENTS = false;
   const $main = document.getElementById('main');
   let cleanup = null;
 
@@ -162,7 +164,7 @@
         h('div', { class: 'side-sec' }, t('sec_community')),
         link('#/rooms', '💬', t('nav_rooms')),
         link('#/forum', '📝', t('nav_forum')),
-        link('#/events', '📅', t('nav_events')),
+        SHOW_EVENTS ? link('#/events', '📅', t('nav_events')) : null,
         link('#/members', '👩‍👧', t('nav_members')),
         link('#/messages', '✉️', t('nav_messages'), h('span', { class: 'badge', id: 'dmBadge' }, state.unread > 0 ? String(state.unread) : '')),
         h('div', { class: 'side-sec' }, t('sec_you')),
@@ -231,7 +233,7 @@
   }
   function pageLanding() {
     const price = state.config.paymentsEnabled ? (state.config.priceLabel || '') : t('price_free');
-    const features = [['💬', 'f_chat'], ['📝', 'f_forum'], ['✉️', 'f_dm'], ['📅', 'f_events'], ['📘', 'f_learn'], ['🤝', 'f_res']];
+    const features = [['💬', 'f_chat'], ['📝', 'f_forum'], ['✉️', 'f_dm'], ['👩‍👧', 'f_moms'], ['📘', 'f_learn'], ['🤝', 'f_res']];
     const preview = ['understanding-love', 'helping', 'adulthood', 'diagnosis', 'mental-health', 'spectrum']
       .map((s) => CONTENT.find((g) => g.slug === s)).filter(Boolean);
     mount(
@@ -382,9 +384,9 @@
         h('div', { class: 'row', style: 'margin-top:14px' },
           h('span', { class: 'pill primary' }, `${d.counts.members} ${t('members_count')}`),
           h('span', { class: 'pill primary' }, `${d.counts.posts} ${d.counts.posts === 1 ? t('posts_count_one') : t('posts_count')}`),
-          d.unread ? h('a', { class: 'pill accent', href: '#/messages', style: 'text-decoration:none' }, `${d.unread} ${t('unread_msgs')}`) : null)),
+          d.unread ? h('a', { class: 'pill accent', href: '#/messages', style: 'text-decoration:none' }, `${d.unread} ${d.unread === 1 ? t('unread_msgs_one') : t('unread_msgs')}`) : null)),
       profileEmpty ? h('div', { class: 'notice warm row between', style: 'margin-top:16px' }, h('span', {}, t('complete_profile')), h('a', { class: 'btn small', href: '#/account' }, t('complete_profile_btn'))) : null,
-      h('div', { class: 'grid-2', style: 'margin-top:18px' }, eventsCard, forumCard, roomsCard, guideCardEl, momsCard,
+      h('div', { class: 'grid-2', style: 'margin-top:18px' }, SHOW_EVENTS ? eventsCard : null, forumCard, roomsCard, guideCardEl, momsCard,
         h('section', { class: 'card', style: 'background:var(--accent-soft);border:0' }, h('h3', {}, '💗 ' + t('selfcare_t')), h('p', { style: 'margin:0;font-size:1.05rem' }, tip))),
     );
   }
@@ -985,7 +987,7 @@
       case 'members': return pageMembers();
       case 'u': return pageProfile(parts[1]);
       case 'messages': return pageMessages(parts[1]);
-      case 'events': return pageEvents();
+      case 'events': return SHOW_EVENTS ? pageEvents() : (state.user ? pageHome() : pageLanding());
       case 'account': return pageAccount();
       default: return state.user ? pageHome() : pageLanding();
     }

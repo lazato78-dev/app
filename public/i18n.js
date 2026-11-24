@@ -14,6 +14,7 @@ window.I18N = {
     f_chat_t: 'Live chat rooms', f_chat_d: '13 rooms on meltdowns, school, anxiety, puberty, adulthood, self-care and more.',
     f_forum_t: 'Forum', f_forum_d: 'Ask a question and get thoughtful answers from moms who have been there.',
     f_dm_t: 'Private messages', f_dm_d: 'Connect one-to-one with moms who live something similar.',
+    f_moms_t: 'Profiles of the moms', f_moms_d: 'See who is in the circle: where they live, how old their teen is and the topics they care about.',
     f_events_t: 'Online meetings', f_events_d: 'Video support circles and talks, in Spanish and English.',
     f_learn_t: 'Guides in plain language', f_learn_d: 'Diagnosis, understanding their love, daily strategies, mental health, therapies and adult life.',
     f_res_t: 'Support directory', f_res_d: 'Crisis lines, parent groups, school rights, tools and books.',
@@ -47,9 +48,9 @@ window.I18N = {
     err_link: 'The link must start with https://', err_bad: 'Please check the form.',
 
     join_title: 'Become a member',
-    join_lead: 'Your membership gives you access to every chat room, the forum, private messages and online meetings, and keeps the community private and ad-free.',
+    join_lead: 'Your membership gives you access to every chat room, the forum and private messages, and keeps the community private and ad-free.',
     join_btn: 'Subscribe', join_redirect: 'Taking you to secure checkout…',
-    join_includes: ['13 live chat rooms', 'Forum: ask & answer', 'Private messages between moms', 'Online support meetings', 'All guides & resource directory', 'Bilingual community (EN / ES)'],
+    join_includes: ['13 live chat rooms', 'Forum: ask & answer', 'Private messages between moms', 'All guides & resource directory', 'Bilingual community (EN / ES)'],
     members_only: 'This area is for members.', members_only_btn: 'See membership',
     login_needed: 'Please log in to continue.',
 
@@ -57,7 +58,7 @@ window.I18N = {
     complete_profile: 'Complete your profile so other moms can get to know you.', complete_profile_btn: 'Complete profile',
     upcoming_events: 'Upcoming meetings', no_events: 'No meetings scheduled yet.',
     latest_forum: 'Latest in the forum', active_rooms: 'Active rooms', quiet_rooms: 'Rooms are quiet — start the conversation!',
-    new_moms: 'New moms', guide_of_day: 'Guide of the day', unread_msgs: 'unread messages', go_messages: 'Open messages',
+    new_moms: 'New moms', guide_of_day: 'Guide of the day', unread_msgs: 'unread messages', unread_msgs_one: 'unread message', go_messages: 'Open messages',
     selfcare_t: 'A reminder for you', selfcare_tips: [
       'Drink a glass of water and take three slow breaths. You deserve a pause.',
       'You are doing better than you think.',
@@ -131,6 +132,7 @@ window.I18N = {
     f_chat_t: 'Salas de chat en vivo', f_chat_d: '13 salas sobre crisis, escuela, ansiedad, pubertad, vida adulta, autocuidado y más.',
     f_forum_t: 'Foro', f_forum_d: 'Haz una pregunta y recibe respuestas de mamás que ya pasaron por ahí.',
     f_dm_t: 'Mensajes privados', f_dm_d: 'Conecta uno a uno con mamás que viven algo parecido.',
+    f_moms_t: 'Perfiles de las mamás', f_moms_d: 'Conoce quién está en el círculo: dónde vive, la edad de su adolescente y los temas que le importan.',
     f_events_t: 'Reuniones en línea', f_events_d: 'Círculos de apoyo y charlas por video, en español e inglés.',
     f_learn_t: 'Guías en lenguaje sencillo', f_learn_d: 'Diagnóstico, entender su amor, estrategias diarias, salud mental, terapias y vida adulta.',
     f_res_t: 'Directorio de apoyo', f_res_d: 'Líneas de crisis, grupos para mamás, derechos escolares, herramientas y libros.',
@@ -164,9 +166,9 @@ window.I18N = {
     err_link: 'El enlace debe empezar con https://', err_bad: 'Revisa el formulario.',
 
     join_title: 'Hazte miembro',
-    join_lead: 'Tu membresía te da acceso a todas las salas de chat, el foro, los mensajes privados y las reuniones en línea, y mantiene la comunidad privada y sin anuncios.',
+    join_lead: 'Tu membresía te da acceso a todas las salas de chat, el foro y los mensajes privados, y mantiene la comunidad privada y sin anuncios.',
     join_btn: 'Suscribirme', join_redirect: 'Te llevamos al pago seguro…',
-    join_includes: ['13 salas de chat en vivo', 'Foro: pregunta y responde', 'Mensajes privados entre mamás', 'Reuniones de apoyo en línea', 'Todas las guías y el directorio de recursos', 'Comunidad bilingüe (ES / EN)'],
+    join_includes: ['13 salas de chat en vivo', 'Foro: pregunta y responde', 'Mensajes privados entre mamás', 'Todas las guías y el directorio de recursos', 'Comunidad bilingüe (ES / EN)'],
     members_only: 'Esta sección es para miembros.', members_only_btn: 'Ver membresía',
     login_needed: 'Inicia sesión para continuar.',
 
@@ -174,7 +176,7 @@ window.I18N = {
     complete_profile: 'Completa tu perfil para que otras mamás puedan conocerte.', complete_profile_btn: 'Completar perfil',
     upcoming_events: 'Próximas reuniones', no_events: 'Aún no hay reuniones programadas.',
     latest_forum: 'Lo último en el foro', active_rooms: 'Salas activas', quiet_rooms: 'Las salas están tranquilas: ¡empieza tú la conversación!',
-    new_moms: 'Mamás nuevas', guide_of_day: 'Guía del día', unread_msgs: 'mensajes sin leer', go_messages: 'Abrir mensajes',
+    new_moms: 'Mamás nuevas', guide_of_day: 'Guía del día', unread_msgs: 'mensajes sin leer', unread_msgs_one: 'mensaje sin leer', go_messages: 'Abrir mensajes',
     selfcare_t: 'Un recordatorio para ti', selfcare_tips: [
       'Toma un vaso de agua y respira lento tres veces. Mereces una pausa.',
       'Lo estás haciendo mejor de lo que crees.',
